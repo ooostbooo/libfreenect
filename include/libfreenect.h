@@ -139,6 +139,11 @@ typedef enum {
 	LED_BLINK_RED_YELLOW = 6, /**< Make LED blink Red/Yellow */
 } freenect_led_options;
 
+typedef enum {
+	KINECT_MODEL_UNSUPPORTED,
+	KINECT_MODEL_1414,
+	KINECT_MODEL_K4W
+} freenect_kinect_model;
 
 /// Enumeration of tilt motor status
 typedef enum {

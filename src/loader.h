@@ -54,7 +54,12 @@ typedef struct {
 	uint32_t status;
 } bootloader_status_code;
 
-int upload_firmware(fnusb_dev* dev);
+typedef enum {
+	FNUSB_FIRMWARE_AUDIO,
+	FNUSB_FIRMWARE_K4W
+} fnusb_firmware_upload_mode;
+
+int upload_firmware(fnusb_dev* dev, fnusb_firmware_upload_mode mode);
 int upload_cemd_data(fnusb_dev* dev);
 
 #endif //__LOADER_H__

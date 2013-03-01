@@ -8,15 +8,15 @@ set(CMAKE_C_FLAGS "-Wall")
 
 include_directories(${LIBUSB_1_INCLUDE_DIRS})
 IF(WIN32)
-  LIST(APPEND SRC core.c tilt.c cameras.c usb_libusb10.c registration.c ../platform/windows/libusb10emu/libusb-1.0/libusbemu.cpp ../platform/windows/libusb10emu/libusb-1.0/failguard.cpp)
+  LIST(APPEND SRC core.c tilt.c cameras.c usb_libusb10.c loader.c registration.c ../platform/windows/libusb10emu/libusb-1.0/libusbemu.cpp ../platform/windows/libusb10emu/libusb-1.0/failguard.cpp)
   set_source_files_properties(${SRC} PROPERTIES LANGUAGE CXX)
 ELSE(WIN32)
-  LIST(APPEND SRC core.c tilt.c cameras.c usb_libusb10.c registration.c)
+  LIST(APPEND SRC core.c tilt.c cameras.c usb_libusb10.c registration.c loader.c)
 ENDIF(WIN32)
 
 IF(BUILD_AUDIO)
   include(FindPythonInterp)
-  LIST(APPEND SRC audio.c loader.c)
+  LIST(APPEND SRC audio.c)
   IF(BUILD_REDIST_PACKAGE)
     # If this build is intended for a redistributable package, we can't include audios.bin, so we should include fwfetcher.py
     # and the package should run "python fwfetcher.py $INSTALL_PREFIX/share" as a postinst hook

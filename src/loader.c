@@ -120,7 +120,7 @@ static int check_version_string(fnusb_dev* dev) {
 	return res;
 }
 
-FN_INTERNAL int upload_firmware(fnusb_dev* dev) {
+FN_INTERNAL int upload_firmware(fnusb_dev* dev, fnusb_firmware_upload_mode mode) {
 	freenect_context* ctx = dev->parent->parent;
 	bootloader_command bootcmd;
 	memset(&bootcmd, 0, sizeof(bootcmd));
@@ -129,14 +129,14 @@ FN_INTERNAL int upload_firmware(fnusb_dev* dev) {
 	int res;
 	int transferred;
 
-	/* Search for firmware file (audios.bin) in the following places:
+	/* Search for firmware file (audios.bin or UAC.bin) in the following places:
 	 * $LIBFREENECT_FIRMWARE_PATH
 	 * .
 	 * ${HOME}/.libfreenect
 	 * /usr/local/share/libfreenect
 	 * /usr/share/libfreenect
 	 */
-	const char* fw_filename = "/audios.bin";
+	const char* fw_filename = mode == FNUSB_FIRMWARE_AUDIO ? "/audios.bin" : "/UAC.bin";
 	int filenamelen = strlen(fw_filename);
 	int i;
 	int searchpathcount;
@@ -157,7 +157,7 @@ FN_INTERNAL int upload_firmware(fnusb_dev* dev) {
 				}
 				break;
 			case 1:
-				fwfile = "./audios.bin";
+				fwfile = mode == FNUSB_FIRMWARE_AUDIO ? "./audios.bin" : "./UAC.bin";
 				break;
 			case 2: {
 				// Construct $HOME/.libfreenect/
@@ -175,10 +175,10 @@ FN_INTERNAL int upload_firmware(fnusb_dev* dev) {
 				}
 				break;
 			case 3:
-				fwfile = "/usr/local/share/libfreenect/audios.bin";
+				fwfile = mode == FNUSB_FIRMWARE_AUDIO ? "/usr/local/share/libfreenect/audios.bin" : "/usr/local/share/libfreenect/UAC.bin";
 				break;
 			case 4:
-				fwfile = "/usr/share/libfreenect/audios.bin";
+				fwfile = mode == FNUSB_FIRMWARE_AUDIO ? "/usr/share/libfreenect/audios.bin" : "/usr/share/libfreenect/UAC.bin";
 				break;
 			default: break;
 		}

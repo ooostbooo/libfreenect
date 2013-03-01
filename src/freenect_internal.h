@@ -129,9 +129,18 @@ static inline int32_t fn_le32s(int32_t s)
 #define VIDEO_PKTDSIZE (VIDEO_PKTSIZE-12)
 
 #define VID_MICROSOFT 0x45e
-#define PID_NUI_AUDIO 0x02ad
-#define PID_NUI_CAMERA 0x02ae
-#define PID_NUI_MOTOR 0x02b0
+
+#define PID_NUI_AUDIO_1414 0x02ad
+#define PID_NUI_AUDIO_K4W 0x02c3
+#define PID_NUI_AUDIO_K4W_BEFORE 0x02be
+#define PID_NUI_CAMERA_1414 0x02ae
+#define PID_NUI_CAMERA_K4W 0x02bf
+#define PID_NUI_MOTOR_1414 0x02b0
+#define PID_NUI_MOTOR_K4W 0x02c3
+
+// the Kinect for Windows has a different size than older models (322)
+#define FREENECT_ZERO_PLANE_SIZE_1414 322
+#define FREENECT_ZERO_PLANE_SIZE_K4W 334
 
 typedef struct {
 	int running;
@@ -234,11 +243,13 @@ struct _freenect_device {
 	freenect_audio_out_cb audio_out_cb;
 
 	audio_stream audio;
-	uint32_t audio_tag;
 #endif
+	uint32_t audio_tag;
+
 	// Motor
 	fnusb_dev usb_motor;
 	freenect_raw_tilt_state raw_state;
+	freenect_kinect_model model;
 };
 
 #endif

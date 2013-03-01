@@ -137,7 +137,7 @@ FREENECTAPI int freenect_supported_subdevices(void) {
 	return FREENECT_DEVICE_MOTOR | FREENECT_DEVICE_CAMERA | FREENECT_DEVICE_AUDIO;
 #else
 	return FREENECT_DEVICE_MOTOR | FREENECT_DEVICE_CAMERA;
-#endif
+#endif // BUILD_AUDIO
 }
 
 FREENECTAPI void freenect_select_subdevices(freenect_context *ctx, freenect_device_flags subdevs) {
@@ -159,6 +159,7 @@ FREENECTAPI int freenect_open_device(freenect_context *ctx, freenect_device **de
 
 	pdev->parent = ctx;
 
+	pdev->model = fnusb_get_kinect_model(pdev, index);
 	res = fnusb_open_subdevices(pdev, index);
 	if (res < 0) {
 		free(pdev);
