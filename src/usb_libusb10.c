@@ -178,12 +178,20 @@ FN_INTERNAL freenect_kinect_model fnusb_get_kinect_model(freenect_device *dev, i
 		
 		// Search for the motor if the 1414
 		if (desc.idProduct == PID_NUI_CAMERA_1414) {
-			model = KINECT_MODEL_1414;
-			break;
+			if (index <= 0) {
+				model = KINECT_MODEL_1414;
+				break;
+			} else {
+				index--;
+			}
 		}
 		if (desc.idProduct == PID_NUI_CAMERA_K4W) {
-			model = KINECT_MODEL_K4W;
-			break;
+			if (index <= 0) {
+				model = KINECT_MODEL_K4W;
+				break;
+			} else {
+				index--;
+			}
 		}
 	}
 	
@@ -217,124 +225,124 @@ FN_INTERNAL int fnusb_open_subdevices(freenect_device *dev, int index)
 #endif
 	int res;
 	struct libusb_device_descriptor desc;
+	fnusb_dev k4w_audio;
+	k4w_audio.dev = NULL;
 	
-	if (dev->model == KINECT_MODEL_K4W) {
-		fnusb_dev k4w_audio;
-		k4w_audio.parent = dev;
-		k4w_audio.dev = NULL;
-		int k4w_nr_audio = 0;
-
-		for (i = 0; i < cnt; i++) {
-			int r = libusb_get_device_descriptor (devs[i], &desc);
-			if (r < 0)
-				continue;
+	// at first we make sure that all of the attached kinects have the correct firmware
+	for (i = 0; i < cnt; i++) {
+		int r = libusb_get_device_descriptor (devs[i], &desc);
+		if (r < 0)
+			continue;
+		
+		if (desc.idVendor != VID_MICROSOFT)
+			continue;
+					
+		// upload firmware to all connected K4W Kinects
+		if (desc.idProduct == PID_NUI_AUDIO_K4W_BEFORE) {
+			k4w_audio.parent = dev;
+			k4w_audio.dev = NULL;
 			
-			if (desc.idVendor != VID_MICROSOFT)
-				continue;
-			
-			// TODO: check that the firmware has already been loaded; if not, upload firmware.
-			// Search for the audio
-			if (!k4w_audio.dev && desc.idProduct == PID_NUI_AUDIO_K4W_BEFORE) {
-				// If the index given by the user matches our audio index
-				if (k4w_nr_audio == index) {
-					res = libusb_open (devs[i], &k4w_audio.dev);
-					if (res < 0 || !k4w_audio.dev) {
-						FN_ERROR("Could not open K4W audio: %d\n", res);
-						k4w_audio.dev = NULL;
-						break;
-					}
-					res = libusb_claim_interface (k4w_audio.dev, 0);
-					if (res < 0) {
-						FN_ERROR("Could not claim interface on K4W audio: %d\n", res);
-						libusb_close(k4w_audio.dev);
-						k4w_audio.dev = NULL;
-						break;
-					}
-					// Using the device handle that we've claimed, see if this
-					// device has already uploaded firmware (has 2 interfaces).  If
-					// not, save the serial number (by reading the appropriate
-					// descriptor), upload the firmware, and then enter a loop
-					// waiting for a device with the same serial number to
-					// reappear.
-					int num_interfaces = fnusb_num_interfaces(&k4w_audio);
-					if (num_interfaces == 1) {
-						// Read the serial number from the string descriptor and save it.
-						unsigned char string_desc[256]; // String descriptors are at most 256 bytes
-						res = libusb_get_string_descriptor_ascii(k4w_audio.dev, desc.iSerialNumber, string_desc, 256);
-						if (res < 0) {
-							FN_ERROR("Failed to retrieve serial number for K4W audio device in bootloader state\n");
-							break;
-						}
-						char* audio_serial = strdup((char*)string_desc);
-						
-						FN_SPEW("Uploading firmware to audio device in bootloader state.\n");
-						res = upload_firmware(&k4w_audio, FNUSB_FIRMWARE_K4W);
-						if (res < 0) {
-							FN_ERROR("upload_firmware failed: %d\n", res);
-							break;
-						}
-						libusb_close(k4w_audio.dev);
-						k4w_audio.dev = NULL;
-						// Wait for the device to reappear.
-						int loops = 0;
-						for (loops = 0; loops < 10; loops++) { // Loop for at most 10 tries.
-							FN_SPEW("Try %d: Looking for new audio device matching serial %s\n", loops, audio_serial);
-							// Scan devices.
-							libusb_device **new_dev_list;
-							int dev_index;
-							ssize_t num_new_devs = libusb_get_device_list(ctx->usb.ctx, &new_dev_list);
-							for (dev_index = 0; dev_index < num_new_devs; ++dev_index) {
-								struct libusb_device_descriptor new_dev_desc;
-								int r;
-								r = libusb_get_device_descriptor (new_dev_list[dev_index], &new_dev_desc);
-								if (r < 0)
-									continue;
-								// If this dev is a Kinect audio device, open device, read serial, and compare.
-								if (new_dev_desc.idVendor == VID_MICROSOFT && new_dev_desc.idProduct == PID_NUI_AUDIO_K4W) {
-									FN_SPEW("Matched VID/PID!\n");
-									libusb_device_handle* new_dev_handle;
-									// Open device
-									r = libusb_open(new_dev_list[dev_index], &new_dev_handle);
-									if (r < 0)
-										continue;
-									// Read serial
-									r = libusb_get_string_descriptor_ascii(new_dev_handle, new_dev_desc.iSerialNumber, string_desc, 256);
-									if (r < 0) {
-										FN_SPEW("Lost new audio device while fetching serial number.\n");
-										libusb_close(new_dev_handle);
-										continue;
-									}
-									// Compare to expected serial
-									if (r == strlen(audio_serial) && strcmp((char*)string_desc, audio_serial) == 0) {
-										// We found it!
-										FN_SPEW("Found new K4W audio device.\n");
-										k4w_audio.dev = new_dev_handle;
-										break;
-									} else {
-										FN_SPEW("Got serial %s, expected serial %s\n", (char*)string_desc, audio_serial);
-									}
-								}
-							}
-							
-							libusb_free_device_list(new_dev_list, 1);
-							// If we found the right device, break out of this loop.
-							if (k4w_audio.dev)
-								break;
-							// Sleep for a second to give the device more time to reenumerate.
-							sleep(1);
-						}
-						free(audio_serial);
-					}
-				} else {
-					k4w_nr_audio++;
+			res = libusb_open (devs[i], &k4w_audio.dev);
+			if (res < 0 || !k4w_audio.dev) {
+				FN_ERROR("Could not open K4W audio: %d\n", res);
+				k4w_audio.dev = NULL;
+				break;
+			}
+			res = libusb_claim_interface (k4w_audio.dev, 0);
+			if (res < 0) {
+				FN_ERROR("Could not claim interface on K4W audio: %d\n", res);
+				libusb_close(k4w_audio.dev);
+				k4w_audio.dev = NULL;
+				break;
+			}
+			// Using the device handle that we've claimed, see if this
+			// device has already uploaded firmware (has 2 interfaces).  If
+			// not, save the serial number (by reading the appropriate
+			// descriptor), upload the firmware, and then enter a loop
+			// waiting for a device with the same serial number to
+			// reappear.
+			int num_interfaces = fnusb_num_interfaces(&k4w_audio);
+			if (num_interfaces == 1) {
+				// Read the serial number from the string descriptor and save it.
+				unsigned char string_desc[256]; // String descriptors are at most 256 bytes
+				res = libusb_get_string_descriptor_ascii(k4w_audio.dev, desc.iSerialNumber, string_desc, 256);
+				if (res < 0) {
+					FN_ERROR("Failed to retrieve serial number for K4W audio device in bootloader state\n");
+					libusb_close(k4w_audio.dev);
+					k4w_audio.dev = NULL;
+					continue;
 				}
+				char* audio_serial = strdup((char*)string_desc);
+				
+				FN_SPEW("Uploading firmware to audio device in bootloader state.\n");
+				res = upload_firmware(&k4w_audio, FNUSB_FIRMWARE_K4W);
+				if (res < 0) {
+					FN_ERROR("upload_firmware failed: %d\n", res);
+					libusb_close(k4w_audio.dev);
+					k4w_audio.dev = NULL;
+					continue;
+				}
+				libusb_close(k4w_audio.dev);
+				k4w_audio.dev = NULL;
+				// Wait for the device to reappear.
+				int loops = 0;
+				for (loops = 0; loops < 10; loops++) { // Loop for at most 10 tries.
+					FN_SPEW("Try %d: Looking for new audio device matching serial %s\n", loops, audio_serial);
+					// Scan devices.
+					libusb_device **new_dev_list;
+					int dev_index;
+					ssize_t num_new_devs = libusb_get_device_list(ctx->usb.ctx, &new_dev_list);
+					for (dev_index = 0; dev_index < num_new_devs; ++dev_index) {
+						struct libusb_device_descriptor new_dev_desc;
+						int r;
+						r = libusb_get_device_descriptor (new_dev_list[dev_index], &new_dev_desc);
+						if (r < 0)
+							continue;
+						// If this dev is a Kinect audio device, open device, read serial, and compare.
+						if (new_dev_desc.idVendor == VID_MICROSOFT && new_dev_desc.idProduct == PID_NUI_AUDIO_K4W) {
+							FN_SPEW("Matched VID/PID!\n");
+							libusb_device_handle* new_dev_handle;
+							// Open device
+							r = libusb_open(new_dev_list[dev_index], &new_dev_handle);
+							if (r < 0)
+								continue;
+							// Read serial
+							r = libusb_get_string_descriptor_ascii(new_dev_handle, new_dev_desc.iSerialNumber, string_desc, 256);
+							if (r < 0) {
+								FN_SPEW("Lost new audio device while fetching serial number.\n");
+								libusb_close(new_dev_handle);
+								continue;
+							}
+							// Compare to expected serial
+							if (r == strlen(audio_serial) && strcmp((char*)string_desc, audio_serial) == 0) {
+								// We found it!
+								FN_SPEW("Found new K4W audio device.\n");
+								k4w_audio.dev = new_dev_handle;
+								break;
+							} else {
+								FN_SPEW("Got serial %s, expected serial %s\n", (char*)string_desc, audio_serial);
+							}
+						}
+					}
+					
+					libusb_free_device_list(new_dev_list, 1);
+					// If we found the right device, break out of this loop.
+					if (k4w_audio.dev) {
+						libusb_close(k4w_audio.dev);
+						k4w_audio.dev = NULL;
+						break;
+					}
+					// Sleep for a second to give the device more time to reenumerate.
+					sleep(1);
+				}
+				free(audio_serial);
 			}
 		}
-
-		if (k4w_audio.dev) {
-			libusb_close(k4w_audio.dev);
-			k4w_audio.dev = NULL;
-		}
+	}
+	
+	if (k4w_audio.dev) {
+		libusb_close(k4w_audio.dev);
+		k4w_audio.dev = NULL;
 	}
 	
 	// now we should have the correct fimrware to get camera and motor
@@ -397,7 +405,7 @@ FN_INTERNAL int fnusb_open_subdevices(freenect_device *dev, int index)
 		// Search for the motor
 		if ((ctx->enabled_subdevices & FREENECT_DEVICE_MOTOR)
 			&& !dev->usb_motor.dev
-			&& desc.idProduct == (dev->model == KINECT_MODEL_1414 ? PID_NUI_MOTOR_1414 : PID_NUI_MOTOR_K4W)) {
+			&& (desc.idProduct == PID_NUI_MOTOR_1414 || desc.idProduct == PID_NUI_MOTOR_K4W)) {
 			// If the index given by the user matches our camera index
 			if (nr_mot == index) {
 				res = libusb_open (devs[i], &dev->usb_motor.dev);
